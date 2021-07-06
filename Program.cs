@@ -13,7 +13,7 @@ namespace DigitalTwinsCodeTutorial
     {
         static async Task Main(string[] args)
         {
-            string adtInstanceUrl = "https://danielshdt.api.sea.digitaltwins.azure.net";
+            string adtInstanceUrl = "https://<your-instance-hostname>";
 
             var credential = new DefaultAzureCredential();
             var client = new DigitalTwinsClient(new Uri(adtInstanceUrl), credential);
@@ -33,8 +33,12 @@ namespace DigitalTwinsCodeTutorial
             //List the relationships
             //await ListRelationshipsAsync(client, "sampleTwin-1");
 
+            //await UpdateTwinDataAsync(client, "sampleTwin-1-0");
+
             //
-            await QueryDigitalTwins(client);
+            //await DeleteTwinAsync(client, "sampleTwin-2");
+            //
+            //await QueryDigitalTwins(client);
         }
 
 
@@ -67,10 +71,10 @@ namespace DigitalTwinsCodeTutorial
         {
             var twinData = new BasicDigitalTwin();
             twinData.Metadata.ModelId = "dtmi:example:SampleModel;1";
-            twinData.Contents.Add("data", $"Hello World!");
+            twinData.Contents.Add("data", $"Hello World-0706!");
 
-            string prefix = "sampleTwin-";
-            for (int i = 0; i < 3; i++)
+            string prefix = "sampleTwin-1-";
+            for (int i = 0; i < 2; i++)
             {
                 try
                 {
@@ -133,6 +137,70 @@ namespace DigitalTwinsCodeTutorial
                 Console.WriteLine(JsonSerializer.Serialize(twin));
                 Console.WriteLine("---------------");
             }
+        }
+
+        private static async Task DeleteTwinAsync(DigitalTwinsClient client, string twinId)
+        {
+            await FindAndDeleteOutgoingRelationshipsAsync(client, twinId);
+            await FindAndDeleteIncomingRelationshipsAsync(client, twinId);
+            try
+            {
+                await client.DeleteDigitalTwinAsync(twinId);
+                Console.WriteLine("Twin deleted successfully");
+            }
+            catch (RequestFailedException ex)
+            {
+                Console.WriteLine($"*** Error:{ex.Message}");
+            }
+        }
+
+        private static async Task FindAndDeleteOutgoingRelationshipsAsync(DigitalTwinsClient client, string dtId)
+        {
+            // Find the relationships for the twin
+
+            try
+            {
+                // GetRelationshipsAsync will throw an error if a problem occurs
+                AsyncPageable<BasicRelationship> rels = client.GetRelationshipsAsync<BasicRelationship>(dtId);
+
+                await foreach (BasicRelationship rel in rels)
+                {
+                    await client.DeleteRelationshipAsync(dtId, rel.Id).ConfigureAwait(false);
+                    Console.WriteLine($"Deleted relationship {rel.Id} from {dtId}");
+                }
+            }
+            catch (RequestFailedException ex)
+            {
+                Console.WriteLine($"*** Error {ex.Status}/{ex.ErrorCode} retrieving or deleting relationships for {dtId} due to {ex.Message}");
+            }
+        }
+
+        private static async Task FindAndDeleteIncomingRelationshipsAsync(DigitalTwinsClient client, string dtId)
+        {
+            // Find the relationships for the twin
+
+            try
+            {
+                // GetRelationshipsAsync will throw an error if a problem occurs
+                AsyncPageable<IncomingRelationship> incomingRels = client.GetIncomingRelationshipsAsync(dtId);
+
+                await foreach (IncomingRelationship incomingRel in incomingRels)
+                {
+                    await client.DeleteRelationshipAsync(incomingRel.SourceId, incomingRel.RelationshipId).ConfigureAwait(false);
+                    Console.WriteLine($"Deleted incoming relationship {incomingRel.RelationshipId} from {dtId}");
+                }
+            }
+            catch (RequestFailedException ex)
+            {
+                Console.WriteLine($"*** Error {ex.Status}/{ex.ErrorCode} retrieving or deleting incoming relationships for {dtId} due to {ex.Message}");
+            }
+        }
+
+        public static async Task UpdateTwinDataAsync(DigitalTwinsClient client, string dtId)
+        {
+            var updateTwinData = new JsonPatchDocument();
+            updateTwinData.AppendAdd("/data", "hello 2021-07-06");
+            await client.UpdateDigitalTwinAsync(dtId, updateTwinData);
         }
     }
 }
